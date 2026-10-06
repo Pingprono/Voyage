@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voyage en Nouvelle-Zélande</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --panel-bg: #222;
+            --text-main: #f0f0f0;
+            --text-muted: #aaa;
+            --accent-color: #27ae60;
+            --activity-color: #e67e22;
+            --hotel-color: #2980b9;
+            --plane-color: #3498db;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Panneau latéral */
+        .sidebar {
+            width: 35%;
+            background-color: var(--panel-bg);
+            padding: 30px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            box-shadow: 5px 0 15px rgba(0,0,0,0.5);
+            z-index: 10;
+            position: relative;
+            overflow-y: auto;
+        }
+
+        .etape-badge {
+            display: inline-block;
+            background: rgba(39, 174, 96, 0.2);
+            color: var(--accent-color);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .content-area {
+            opacity: 1;
+            transition: opacity 0.5s ease;
+        }
+
+        h1 {
+            margin: 0 0 15px 0;
+            font-size: 2.2rem;
+            line-height: 1.2;
+        }
+
+        .etape-image {
+            width: 100%;
+            height: 400px; /* Hauteur agrandie pour moins couper les photos */
+            object-fit: cover;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            display: none; /* Hidden on init */
+        }
+
+        p.description {
+            font-size: 1.05rem;
+            line-height: 1.6;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .details-box {
+            background: #2a2a2a;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .details-box p {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon-activity { color: var(--activity-color); }
+        .icon-hotel { color: var(--hotel-color); }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: auto;
+        }
+
+        .btn {
+            border: none;
+            padding: 15px 20px;
+            font-size: 1.05rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-weight: bold;
+        }
+
+        .btn-next {
+            background-color: var(--accent-color);
+            color: white;
+            flex: 2;
+        }
+
+        .btn-next:hover { background-color: #219653; transform: translateY(-2px); }
+        .btn-next:disabled { background-color: #555; cursor: not-allowed; transform: none; }
+
+        .btn-global {
+            background-color: #444;
+            color: white;
+            flex: 1;
+        }
+        
+        .btn-global:hover { background-color: #555; transform: translateY(-2px); }
+
+        /* Carte */
+        .map-container {
+            width: 65%;
+            height: 100%;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background-color: #111;
+        }
+
+        /* Custom Markers */
+        .custom-marker {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            color: white;
+            font-size: 16px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.8);
+            border: 2px solid white;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .custom-marker:hover { transform: scale(1.1); }
+        .marker-activity { background-color: var(--activity-color); }
+        .marker-hotel { background-color: var(--hotel-color); }
+        
+        .plane-icon {
+            font-size: 24px;
+            text-align: center;
+            line-height: 24px;
+            filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.5));
+        }
+
+        @media (max-width: 768px) {
+            .container { flex-direction: column; }
+            .sidebar { width: 100%; height: 50%; padding: 20px; }
+            .map-container { width: 100%; height: 50%; }
+            h1 { font-size: 1.6rem; }
+            .etape-image { height: 200px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="sidebar">
+        <div class="content-area" id="contentArea">
+            <span class="etape-badge" id="etapeBadge">Début du voyage</span>
+            <h1 id="etapeTitle">Bienvenue en Nouvelle-Zélande</h1>
+            
+            <img id="etapeImg" class="etape-image" src="" alt="Illustration de l'étape">
+
+            <div class="details-box" id="detailsBox" style="display: none;">
+                <p id="activityText"><span class="icon-activity">🎯</span> <b>Activité :</b> <span>...</span></p>
+                <p id="hotelText"><span class="icon-hotel">🛏️</span> <b>Hébergement :</b> <span>...</span></p>
+            </div>
+
+            <p class="description" id="etapeDesc">
+                Prêt à revivre notre incroyable parcours à travers les paysages spectaculaires de la Nouvelle-Zélande ? Cliquez sur le bouton "Étape suivante" pour commencer l'itinéraire ou sur "Vue Globale" pour voir tout le trajet.
+            </p>
+        </div>
+        
+        <div class="button-group">
+            <button class="btn btn-global" onclick="showGlobalView()">🗺️ Vue globale</button>
+            <button class="btn btn-next" id="nextBtn" onclick="nextEtape()">Démarrer l'aventure ➔</button>
+        </div>
+    </div>
+
+    <div class="map-container">
+        <div id="map"></div>
+    </div>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    const map = L.map('map').setView([-36.8485, 174.7633], 6);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
+        maxZoom: 16
+    }).addTo(map);
+
+    const routeLayer = L.layerGroup().addTo(map);
+    let currentStepPolylines = [];
+    let currentStepIndex = -1;
+    let isAnimating = false;
+    let allMarkers = [];
+
+    const activityIcon = L.divIcon({ className: 'custom-marker marker-activity', html: '🎯', iconSize: [30, 30], iconAnchor: [15, 15] });
+    const hotelIcon = L.divIcon({ className: 'custom-marker marker-hotel', html: '🛏', iconSize: [30, 30], iconAnchor: [15, 15] });
+    const planeDivIcon = L.divIcon({ className: 'plane-icon', html: '✈️', iconSize: [30, 30], iconAnchor: [15, 15] });
+
+    const etapes = [
+        {
+            title: "Arrivée à Auckland",
+            desc: "Arrivée dans la plus grande ville du pays. Découvrez les légendes maories autour des volcans de la région qui façonnent ce paysage urbain unique.",
+            activity: "",
+            hotel: "Pullman Auckland Airport",
+            img: "https://cdn.getyourguide.com/image/format=avif%2Cfit=cover%2Cgravity=auto%2Cquality=60/dam/iStock-2164107041-2-HEADER%20MOBILE.jpg",
+            points: [{ lat: -37.0082, lng: 174.7850, type: 'hotel', name: 'Pullman Auckland Airport' }]
+        },
+        {
+            title: "Waipoua Forest",
+            desc: "Plongée dans le domaine de Tāne Mahuta, le dieu de la forêt. Les kauris géants abritent les esprits de la nature dans la mythologie maorie.",
+            activity: "Visite guidée de nuit",
+            hotel: "Waipoua Lodge",
+            img: "https://dynamic-media-cdn.tripadvisor.com/media/photo-o/08/13/b9/76/tane-mahuta-waipoua-forest.jpg?w=600&h=-1&s=1",
+            points: [
+                { lat: -35.6208, lng: 173.5303, type: 'activity', name: 'Waipoua Forest' },
+                { lat: -35.6400, lng: 173.5500, type: 'hotel', name: 'Waipoua Lodge' }
+            ]
+        },
+        {
+            title: "Vol vers le Cap Reinga",
+            desc: "Trajet vers Parua Bay puis survol mythique du Cap Reinga, là où les esprits des défunts maoris plongent dans l'océan pour rejoindre Hawaiki.",
+            activity: "Tour en avion du Cap Reinga",
+            hotel: "",
+            img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT5nxBjx3-6XS_oWZLo59YOLUQkF5UrJQt3nu7rvPzMgn1hgsziS1p4EZyt&s=10",
+            points: [
+                // Trajet de Waipoua Lodge à Parua Bay se fait en mode "drive" (voiture)
+                { lat: -35.7750, lng: 174.4540, type: 'activity', name: 'Parua Bay (Départ Avion)', mode: 'drive' },
+                // Trajet de Parua Bay au Cap Reinga se fait en mode "fly" (avion)
+                { lat: -34.4283, lng: 172.6798, type: 'activity', name: 'Cap Reinga', mode: 'fly' },
+                // Retour en mode "fly" (avion)
+                { lat: -35.7750, lng: 174.4540, type: 'hotel', name: 'Retour Parua Bay', mode: 'fly' }
+            ]
+        },
+        {
+            title: "Culture à Auckland",
+            desc: "Retour vers la métropole pour écouter les sons ancestraux. Les instruments traditionnels (Taonga Pūoro) racontent les chants des dieux.",
+            activity: "Découverte des instruments traditionnels",
+            hotel: "Pullman Auckland Airport",
+            img: "https://cdn.getyourguide.com/image/format=avif%2Cfit=cover%2Cgravity=auto%2Cquality=60/dam/iStock-2164107041-2-HEADER%20MOBILE.jpg",
+            points: [
+                { lat: -36.8485, lng: 174.7633, type: 'activity', name: 'Auckland Centre', mode: 'drive' },
+                { lat: -37.0082, lng: 174.7850, type: 'hotel', name: 'Pullman Auckland Airport', mode: 'drive' }
+            ]
+        },
+        {
+            title: "Kaituna River",
+            desc: "Descente en rafting sur la rivière Kaituna. L'eau est un élément sacré gardé par les taniwhas, de puissants esprits protecteurs aquatiques.",
+            activity: "Rafting",
+            hotel: "Regal Palms Resort",
+            img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQtGwRfiwiaJ19WSXWBFpM99ZN6ocT95vrdlc9a7hykJyKyDer4Oz39C5nt&s=10",
+            points: [
+                { lat: -38.0167, lng: 176.3167, type: 'activity', name: 'Kaituna River' },
+                { lat: -38.1368, lng: 176.2497, type: 'hotel', name: 'Regal Palms Resort' }
+            ]
+        },
+        {
+            title: "Ressourcement à Rotorua",
+            desc: "Les eaux géothermales de Rotorua sont un don des dieux du feu. Profitez d'un soin basé sur le savoir-faire ancestral de guérison maori.",
+            activity: "Massage traditionnel Maori",
+            hotel: "Regal Palms Resort",
+            img: "https://www.new-zealand-roads.fr/wp-content/uploads/2019/06/roturua-1.jpg.webp",
+            points: [{ lat: -38.1368, lng: 176.2497, type: 'activity', name: 'Rotorua' }]
+        },
+        {
+            title: "Muriwai's Cave (Whakatāne)",
+            desc: "Exploration des mystères de Muriwai à Whakatāne, lieu chargé de légendes maritimes et de l'histoire des grands navigateurs waka.",
+            activity: "Découverte de la grotte",
+            hotel: "",
+            img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQVguHp2QxdsjO4QDpdvNJ7Fbdin_iqy-BiR8QdBLWVlSQrKMaiTlHjcs3s&s=10",
+            points: [{ lat: -37.9531, lng: 177.0000, type: 'activity', name: 'Muriwai Cave' }]
+        },
+        {
+            title: "Whakarewarewa Village",
+            desc: "Vivez au rythme de la tribu Tūhourangi Ngāti Wāhiao. Un partage spirituel authentique, entouré des fumerolles et des geysers sacrés.",
+            activity: "Visite du village et découverte culturelle",
+            hotel: "Overnight Marae Stay",
+            img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSDYxf98DjLbaTxVsvn36S_mPDb2Ys3FyrH2JuNfGRrhQ&s=10",
+            points: [
+                { lat: -38.1611, lng: 176.2558, type: 'activity', name: 'Whakarewarewa' },
+                { lat: -38.1600, lng: 176.2500, type: 'hotel', name: 'Marae Stay' }
+            ]
+        },
+        {
+            title: "Ngātoro-i-rangi Mine Bay",
+            desc: "Au bord du lac Taupo, observez les magnifiques sculptures rupestres maories de Mine Bay avant de pêcher dans ces eaux bénies par les ancêtres.",
+            activity: "Pêcher puis cuisiner son poisson",
+            hotel: "The Point Villas Taupo",
+            img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQQESCX6YgYI8fVOHYc0WMU2pNjIV6xjl20LRtmdDwHkg&s=10",
+            points: [
+                { lat: -38.7408, lng: 175.9902, type: 'activity', name: 'Ngatoroirangi Mine Bay' },
+                { lat: -38.7400, lng: 175.9000, type: 'hotel', name: 'The Point Villas Taupo' }
+            ]
+        },
+        {
+            title: "Ascension du Tongariro",
+            desc: "Marchez au sommet des volcans, des montagnes considérées comme des chefs suprêmes (Ariki) pétrifiés par la magie ancestrale.",
+            activity: "Randonnée",
+            hotel: "River Birches Lodge",
+            img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQjUMFHJ_7MlnBT_15fyrTooDxO4X-Fm9nCjz09u2W26g&s",
+            points: [
+                { lat: -39.1333, lng: 175.6500, type: 'activity', name: 'Tongariro' },
+                { lat: -38.9660, lng: 175.8160, type: 'hotel', name: 'River Birches Lodge' }
+            ]
+        },
+        {
+            title: "Waitomo Caves",
+            desc: "Plongez sous terre où les vers luisants dessinent une voie lactée souterraine, un reflet de la création du monde, Te Pō (la nuit originelle).",
+            activity: "Spéléologie",
+            hotel: "Waitomo Boutique Lodge",
+            img: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR5iBhxgnixR3rbZGZqCdtF-HyKP3YQy4_d6R1bX0IzlP9BER5UHypu506v&s=10",
+            points: [
+                { lat: -38.2611, lng: 175.1147, type: 'activity', name: 'Waitomo Caves' },
+                { lat: -38.2600, lng: 175.1000, type: 'hotel', name: 'Waitomo Boutique Lodge' }
+            ]
+        },
+        {
+            title: "Fin de l'aventure à Auckland",
+            desc: "La boucle est bouclée. Il est temps de dire 'Ka kite anō' (à bientôt) à Aotearoa, le pays du long nuage blanc.",
+            activity: "",
+            hotel: "Aéroport d'Auckland",
+            img: "https://cdn.getyourguide.com/image/format=avif%2Cfit=cover%2Cgravity=auto%2Cquality=60/dam/iStock-2164107041-2-HEADER%20MOBILE.jpg",
+            points: [{ lat: -37.0082, lng: 174.7850, type: 'activity', name: 'Aéroport' }]
+        }
+    ];
+
+    function updateSidebar(index) {
+        const etape = etapes[index];
+        const contentArea = document.getElementById('contentArea');
+        contentArea.style.opacity = 0;
+        
+        setTimeout(() => {
+            document.getElementById('etapeBadge').innerText = `Étape ${index + 1}`;
+            document.getElementById('etapeTitle').innerText = etape.title;
+            document.getElementById('etapeDesc').innerText = etape.desc;
+            
+            const imgEl = document.getElementById('etapeImg');
+            imgEl.src = etape.img;
+            imgEl.style.display = 'block';
+
+            document.getElementById('detailsBox').style.display = 'block';
+            
+            const actRow = document.getElementById('activityText');
+            if(etape.activity) {
+                actRow.style.display = 'flex';
+                actRow.querySelector('span:last-child').innerText = etape.activity;
+            } else { actRow.style.display = 'none'; }
+
+            const hotRow = document.getElementById('hotelText');
+            if(etape.hotel) {
+                hotRow.style.display = 'flex';
+                hotRow.querySelector('span:last-child').innerText = etape.hotel;
+            } else { hotRow.style.display = 'none'; }
+            
+            document.getElementById('nextBtn').innerText = index === etapes.length - 1 ? "Terminer" : "Étape suivante ➔";
+            contentArea.style.opacity = 1;
+        }, 300);
+    }
+
+    function jumpToEtape(index) {
+        if (isAnimating) return;
+        currentStepIndex = index;
+        updateSidebar(index);
+        
+        const currentEtape = etapes[index];
+        if (currentEtape.points.length > 1) {
+            const bounds = L.latLngBounds(currentEtape.points.map(p => [p.lat, p.lng]));
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12, animate: true });
+        } else {
+            map.flyTo([currentEtape.points[0].lat, currentEtape.points[0].lng], 12, { animate: true });
+        }
+    }
+
+    async function showGlobalView() {
+        if (isAnimating) return;
+        routeLayer.clearLayers();
+        allMarkers = [];
+        
+        let allPoints = [];
+
+        for (let i = 0; i < etapes.length; i++) {
+            const currentEtape = etapes[i];
+            
+            currentEtape.points.forEach(pt => {
+                const icon = pt.type === 'activity' ? activityIcon : hotelIcon;
+                const marker = L.marker([pt.lat, pt.lng], { icon: icon }).addTo(routeLayer);
+                
+                marker.bindTooltip(`<b>${pt.name}</b><br>Étape ${i+1}<br><i>Cliquez pour voir</i>`, { direction: 'top' });
+                marker.on('click', () => jumpToEtape(i));
+                
+                allMarkers.push(marker);
+                allPoints.push([pt.lat, pt.lng]);
+            });
+
+            if (i > 0) {
+                const prevEtape = etapes[i-1];
+                let lastPt = prevEtape.points[prevEtape.points.length - 1];
+                
+                for (const pt of currentEtape.points) {
+                    const lineCoords = [ [lastPt.lat, lastPt.lng], [pt.lat, pt.lng] ];
+                    const isFlight = pt.mode === 'fly';
+                    
+                    if(isFlight) {
+                        L.polyline(lineCoords, { color: 'var(--plane-color)', weight: 3, dashArray: '8, 8' }).addTo(routeLayer);
+                    } else {
+                        L.polyline(lineCoords, { color: 'var(--accent-color)', weight: 3, opacity: 0.6 }).addTo(routeLayer);
+                    }
+                    lastPt = pt;
+                }
+            }
+        }
+
+        const bounds = L.latLngBounds(allPoints);
+        map.fitBounds(bounds, { padding: [30, 30], animate: true });
+    }
+
+    async function getRoute(coords) {
+        const coordsString = coords.map(c => `${c[1]},${c[0]}`).join(';');
+        const url = `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=full&geometries=geojson`;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        } catch (e) { return coords; }
+    }
+
+    async function animateSegment(routeCoordinates, isFlight) {
+        const animatedLine = L.polyline([], {
+            color: isFlight ? 'var(--plane-color)' : 'var(--accent-color)',
+            weight: isFlight ? 3 : 4,
+            opacity: 0.9,
+            dashArray: isFlight ? '10, 10' : ''
+        }).addTo(routeLayer);
+        
+        currentStepPolylines.push(animatedLine);
+        
+        let planeMarker = null;
+        if(isFlight) { planeMarker = L.marker(routeCoordinates[0], {icon: planeDivIcon}).addTo(routeLayer); }
+
+        const pointsPerFrame = 8; 
+        const totalPoints = routeCoordinates.length;
+        let i = 0;
+        
+        return new Promise(resolve => {
+            function drawNext() {
+                if (i < totalPoints) {
+                    const chunk = routeCoordinates.slice(i, i + pointsPerFrame);
+                    chunk.forEach(pt => animatedLine.addLatLng(pt));
+                    
+                    const headPoint = routeCoordinates[Math.min(i + pointsPerFrame - 1, totalPoints - 1)];
+                    if(planeMarker) planeMarker.setLatLng(headPoint);
+
+                    if (i % (pointsPerFrame * 3) === 0) {
+                        map.panTo(headPoint, { animate: true, duration: 0.2 });
+                    }
+                    
+                    i += pointsPerFrame;
+                    requestAnimationFrame(drawNext);
+                } else {
+                    if(planeMarker) routeLayer.removeLayer(planeMarker);
+                    resolve();
+                }
+            }
+            drawNext();
+        });
+    }
+
+    async function nextEtape() {
+        if (isAnimating) return;
+        if (currentStepIndex >= etapes.length - 1) return;
+
+        const previousEtape = currentStepIndex >= 0 ? etapes[currentStepIndex] : null;
+        currentStepIndex++;
+        const currentEtape = etapes[currentStepIndex];
+        
+        updateSidebar(currentStepIndex);
+
+        if (!previousEtape) {
+            let coordsToRoute = currentEtape.points.map(p => [p.lat, p.lng]);
+            map.flyTo(coordsToRoute[0], 11, { duration: 1.5 });
+            setTimeout(() => {
+                currentEtape.points.forEach(pt => {
+                    const icon = pt.type === 'activity' ? activityIcon : hotelIcon;
+                    const marker = L.marker([pt.lat, pt.lng], { icon: icon }).addTo(routeLayer);
+                    marker.bindTooltip(`<b>${pt.name}</b><br><i>Cliquez pour voir</i>`, {direction: 'top'});
+                    marker.on('click', () => jumpToEtape(currentStepIndex));
+                });
+            }, 1500);
+            return;
+        }
+
+        // Griser les anciens chemins
+        currentStepPolylines.forEach(poly => poly.setStyle({ color: '#555', opacity: 0.5, dashArray: '5, 10' }));
+        currentStepPolylines = [];
+
+        // Dézoom large (2 niveaux de moins) pour moins d'agressivité pendant le trajet
+        const currentZoom = map.getZoom();
+        map.setZoom(currentZoom - 2, { animate: true });
+        await new Promise(r => setTimeout(r, 600));
+
+        isAnimating = true;
+        document.getElementById('nextBtn').disabled = true;
+
+        const lastPoint = previousEtape.points[previousEtape.points.length - 1];
+        let lastCoord = [lastPoint.lat, lastPoint.lng];
+
+        for (const pt of currentEtape.points) {
+            const targetCoord = [pt.lat, pt.lng];
+            const isFlight = pt.mode === 'fly';
+            
+            let routeCoords = [];
+            if(isFlight) {
+                for(let step=0; step<=50; step++) {
+                    const lat = lastCoord[0] + (targetCoord[0]-lastCoord[0]) * (step/50);
+                    const lng = lastCoord[1] + (targetCoord[1]-lastCoord[1]) * (step/50);
+                    routeCoords.push([lat, lng]);
+                }
+            } else {
+                routeCoords = await getRoute([[lastCoord[0], lastCoord[1]], [targetCoord[0], targetCoord[1]]]);
+            }
+
+            await animateSegment(routeCoords, isFlight);
+            lastCoord = targetCoord;
+        }
+
+        currentEtape.points.forEach(pt => {
+            const icon = pt.type === 'activity' ? activityIcon : hotelIcon;
+            const marker = L.marker([pt.lat, pt.lng], { icon: icon }).addTo(routeLayer);
+            marker.bindTooltip(`<b>${pt.name}</b><br><i>Cliquez pour voir</i>`, {direction: 'top'});
+            marker.on('click', () => jumpToEtape(currentStepIndex));
+        });
+
+        isAnimating = false;
+        document.getElementById('nextBtn').disabled = false;
+
+        if (currentEtape.points.length > 1) {
+            const bounds = L.latLngBounds(currentEtape.points.map(p => [p.lat, p.lng]));
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12, animate: true });
+        }
+    }
+</script>
+</body>
+</html>
